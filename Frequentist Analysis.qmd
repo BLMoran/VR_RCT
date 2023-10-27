@@ -1,6 +1,6 @@
 ---
 title: "A Randomised-Controlled Trial of Virtual Reality Training for Ultrasound-Guided Femoral Nerve Blocks" 
-subtitle: "A Bayesian Analysis"
+subtitle: "A Frequentist Analysis"
 author: "Dr Benjamin Moran"
 date: today
 format:   
