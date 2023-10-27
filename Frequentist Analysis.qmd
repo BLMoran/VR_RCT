@@ -1,0 +1,271 @@
+---
+title: "A Randomised-Controlled Trial of Virtual Reality Training for Ultrasound-Guided Femoral Nerve Blocks" 
+subtitle: "A Bayesian Analysis"
+author: "Dr Benjamin Moran"
+date: today
+format:   
+  html:
+    embed-resources: true
+    grid: 
+      body-width: 3500px
+      sidebar-width: 300px
+toc: true
+toc-location: left
+toc-depth: 4
+number-sections: true
+---
+
+## Introduction
+
+This is an explanation of the Bayesian analysis of the randomsied controlled trial comoparing virtual reality training vs standard care for ultrasound-guided femoral nerve blocks.
+
+## Methods
+
+This manuscript has been prepared in accordance with the Strengthening the Reporting of Observational Studies in Epidemiology (STROBE) Statement.
+
+### Study Design
+
+This is a prospective, double-blinded, randomised controlled, single-site study, comparing the effectiveness of virtual reality training (VR training group) against didactic/benchtop training (standard training).
+
+### Outcomes
+
+#### Primary Outcome
+
+The primary outcome is difference in global rating scale (GRS) between the virtual reality training and standard conventional training groups, when measured by two independent assessors trained to perform scoring through an iterative process.
+
+#### Secondary Outcome
+
+The secondary outcomes include the difference in composite error scores, comprising of the error score, the number of needle passes, and the image quality score, between the virtual reality training and standard conventional training groups, when measured by the same two independent assessors. Additional secondary outcomes include the time taken to complete the block, the TLX score and the DASS score, with it's components of depression, anxiety and stress scores.
+
+### Statistical Analysis
+
+#### The ANCOVA (ANalysis of COVAriance) Model
+
+The ANCOVA model adds baseline covariates to a regular linear model to adjust for baseline imbalance of the outcome (ie using change scores without adjustment leads to bias in the model and increases the risk of regression to the mean). The overall model for the primary outcome (including the likelihood) is given below:
+
+$$
+\begin{align*}
+OutcomeGRS_i & \sim \operatorname{Normal}(\mu_i, \sigma)\\
+\mu_i & = \beta_0 + \beta_1Treatment_i + \beta_2BaselineGRS_i + \\
+&\quad \beta_3Age_i +\beta_4Sex_i + \beta_5PreviousGaming_i + \\
+&\quad \beta_6DASS
+\\
+\end{align*}
+$$
+
+where $OutcomeGRS_i$ is normally distributed with a mean, $\mu_i$, and a standard deviation of $\sigma$. $\beta_0$ is the coefficient of the intercept, which represents the average GRS score of the study population. $\beta_2$ is the coefficient for our baseline Global Rating Scale (the assessment prior to the intervention), $\beta_3$ to $\beta_6$ are the coefficients for the baseline covariates.
+
+The analysis of the secondary outcomes were obtained using the Poisson regression (with a log link), ordinal regression (with a logit link) and a linear regression, where appropriate. 
+
+## Results
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::knit_hooks$set(inline = function(x) {
+  x <- sprintf("%1.2f", x)
+  paste(x, collapse = ", ")
+})
+
+library(tidyverse)
+library(lme4)
+library(gtsummary)
+library(gt)
+library(marginaleffects)
+library(irr)
+
+# Import and Convert GRS into Ordered Data
+vr <- readxl::read_excel("VR RCT.xlsx") 
+
+# Convert age variable into years
+vr <- vr |> 
+  mutate(age = Age_months/12)
+
+# Change GRS into a percentage
+vr <- vr |> 
+  mutate(baseline_grs_pct = (Baseline_GRS_Average/35)*100) |> 
+  mutate(final_grs_pct = (Final_GRS_Average/35)*100)
+
+# Generate Table 1
+table1 <- vr |> 
+  mutate(Group = case_when(
+    Group == "VR" ~ "Virtual Reality",
+    Group == "conventional" ~ "Standard")) |> 
+  gtsummary::select(Group, age, Sex, Played_Video_Games_Before, IfPlayed_VideoGames_HowLong_Years, Played_VRGames_Before, Depression, Anxiety, Stress, DASS_Total) |> 
+  tbl_summary(by = "Group", missing = "no",
+              label = list(
+                age = "Age in Years (Mean (SD))",
+                Sex = "Female Sex (n(%))",
+                Played_Video_Games_Before = "Played Video Games Previously",
+                IfPlayed_VideoGames_HowLong_Years = "Time Playing Video Games in Years (Mean (SD))",
+                Played_VRGames_Before = "Played Virtual Reality Games Previously",
+                DASS_Total = "Total DASS Score"),
+              value = list(
+                Sex ~ "female",
+                Played_Video_Games_Before ~ "yes",
+                Played_VRGames_Before ~ "yes"),
+              type = list(IfPlayed_VideoGames_HowLong_Years ~ "continuous",
+                          Anxiety ~ "continuous"),
+              statistic = list(all_continuous() ~ "{mean} ({sd})",
+                               all_categorical() ~ "{n} ({p}%)")) |> 
+  bold_labels() |> 
+  modify_spanning_header(starts_with("stat_") ~ "**Intervention**") |> 
+  add_overall()
+
+# Run model
+vr_primary <- lm(final_grs_pct ~ baseline_grs_pct + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years + DASS_Total, data = vr) |> broom::tidy(conf.int = T)
+  
+
+```
+
+### Demographics
+
+Participant demographics are given in the table below:
+```{r}
+table1
+```
+
+### Primary Outcome
+
+The analysis shows that there was no difference in the Global Rating Scale in the use of virtual reality training compared with standard teaching for ultrasound-guided femoral nerve blocks. After adjusting for baseline differences in the GRS, age, sex and years of playing video games, the VR group had a mean GRS of `r vr_primary$estimate[1]` and the standard group had a mean GRS of `r vr_primary$estimate[1] + vr_primary$estimate[3] ` The average treatment effect of using Virtual Reality compared to standard teaching is `r vr_primary$estimate[3]`% (95% CI `r vr_primary$conf.low[3]` - `r vr_primary$conf.high[3]`).
+
+### Secondary Outcomes
+As can be seen from the table below, there are no differences in any of the pre-specified secondary outcomes between the virtual reality and standard teaching interventions.
+
+```{r, include=FALSE}
+
+# Run model to determine a difference in error scores
+vr_error_score <- glm(
+  data = vr,
+  formula = as.integer(Final_BoxA) ~ as.integer(Baseline_BoxA) + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years,
+  family = poisson(link = "log")) |> avg_comparisons(variables = "Group")
+
+# Run model to determine a difference in needle passes
+vr_needle_pass <- glm(
+  data = vr,
+  formula = as.integer(Final_BoxB) ~ as.integer(Baseline_BoxB) + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years,
+  family = poisson(link = "log")) |> avg_comparisons(variables = "Group")
+
+# Run model to determine a difference in image quality score
+vr_image_qual <- MASS::polr(
+  data = vr,
+  formula = as.ordered(Final_BoxC) ~ as.ordered(Baseline_BoxC) + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years) |> broom::tidy(conf.int = T)
+
+# Run model to determine a difference in Composite Error Score
+vr_ces <- glm(
+  data = vr,
+  formula = as.integer(Final_CES_Score) ~ as.integer(Baseline_CES_Score) + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years,
+  family = poisson(link = "log")) |> avg_comparisons(variables = "Group")
+
+# Run model to determine a difference in time taken
+vr_time <- lm(
+  data = vr,
+  formula = Final_Time_Average ~ Baseline_Time_Average + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years) |> avg_comparisons(variables = "Group")
+
+# Run model to determine a difference in TLX
+vr_tlx <- lm(
+  data = vr,
+  formula = Final_TLX_Score ~ Baseline_TLX_Score + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years) |> avg_comparisons(variables = "Group")
+
+# Tabulate Data Function
+table <- function(data){
+  data |>
+  mutate(across(estimate:conf.high, ~round(.,2))) |>  
+  reframe(Outcome = Outcome, Subgroup, "ATE [95% CI]" = str_c(estimate, " [", conf.low, ", ", conf.high, "]"))
+}
+
+sec_outcome_error <- vr_error_score |> mutate(Outcome = "Error Score", Subgroup = "Error") |> table()
+sec_outcome_needle <- vr_needle_pass |> mutate(Outcome = "Number of Needle Passes", Subgroup = "Error")  |> table()
+sec_outcome_image <- vr_image_qual |> slice(9) |> mutate(Outcome = "Image Quality Score", Subgroup = "Error")  |> table()
+sec_outcome_ces <- vr_ces |> mutate(Outcome = "Composite Error Score", Subgroup = "Error")  |> table()
+sec_outcome_time <- vr_time |> mutate(Outcome = "Time Taken", Subgroup = "Other")  |> table()
+sec_outcome_tlx <- vr_tlx |> mutate(Outcome = "TLX Score", Subgroup = "Other")  |> table()
+
+sec_outcomes <-
+  rbind(sec_outcome_error, sec_outcome_needle, sec_outcome_image, sec_outcome_ces, sec_outcome_time, sec_outcome_tlx)
+
+# Create Table
+sec_outcomes_tbl <- sec_outcomes |> 
+  group_by(Subgroup, Outcome) |> 
+  gt(groupname_col = c("Subgroup"))|>  
+  tab_stubhead(label = " ") |>  
+  tab_options(
+    row_group.as_column = TRUE,
+    row_group.border.top.width = px(3),
+    row_group.font.weight = "bold",
+    table.border.bottom.width = px(3),
+    table.border.bottom.color = "black",
+    table.border.top.color = "white",
+    heading.border.bottom.color = "black",
+    heading.border.bottom.width = px(3),
+    heading.title.font.weight = "bold") |> 
+  tab_row_group(
+    label = "Error Metrics",
+    rows = c(1:4)) |>   
+  tab_row_group(
+    label = "Other Outcomes",
+    rows = c(5:6)) |> 
+  row_group_order(groups = c("Error Metrics", "Other Outcomes")) |> 
+  tab_header(title = "Secondary Outcomes")|>
+  opt_align_table_header(align = "left") |> 
+  tab_style(
+    style = cell_borders(
+      sides = "right",
+      weight = px(3),
+      color = "light grey"),
+    locations = cells_body(
+      columns = Outcome)) |> 
+  tab_footnote(footnote = "ATE = Average Treatment Effect")
+
+```
+
+```{r}
+sec_outcomes_tbl
+```
+
+
+```{r, include=FALSE}
+knitr::knit_hooks$set(inline = function(x) {
+  x <- sprintf("%1.2f", x)
+  paste(x, collapse = ", ")
+})
+
+# Import Non-composite dataset.
+baselineGRS_icc <- readxl::read_excel("VR_ICC.xlsx", sheet = "Baseline_GRS") 
+finalGRS_icc <- readxl::read_excel("VR_ICC.xlsx", sheet = "Final_GRS") 
+ces_icc <- readxl::read_excel("VR_ICC.xlsx", sheet = "CES") 
+
+icc_baselineGRS <- icc(baselineGRS_icc, model = "twoway", type = "agreement", unit = "average")
+icc_finalGRS <- icc(finalGRS_icc, model = "twoway", type = "agreement", unit = "average")
+icc_ces <- icc(ces_icc, model = "twoway", type = "agreement", unit = "average")
+
+icc_table <- tibble(
+  Test = c("Baseline GRS", "Final GRS", "Final CES"),
+  ICC = c(icc_baselineGRS$value, icc_finalGRS$value, icc_ces$value),
+  conf.low = c(icc_baselineGRS$lbound, icc_finalGRS$lbound, icc_ces$lbound),
+  conf.high = c(icc_baselineGRS$ubound, icc_finalGRS$ubound, icc_ces$ubound)) |> 
+  mutate(across(ICC:conf.high, ~round(.,2))) |> 
+  mutate(conf.low = as.character(conf.low),
+         conf.high = as.character(conf.high),
+         "95% CI" = str_c(" [", conf.low, ", ", conf.high, "]")) |> 
+  select(-c(conf.low, conf.high)) |> 
+  gt() |> 
+  tab_header(title = "Intra-rater Correlation Coefficient") |>
+  opt_align_table_header(align = "left") |> 
+  tab_options(
+    row_group.border.top.width = px(3),
+    row_group.font.weight = "bold",
+    table.border.bottom.width = px(3),
+    table.border.bottom.color = "black",
+    table.border.top.color = "white",
+    heading.border.bottom.color = "black",
+    heading.border.bottom.width = px(3),
+    heading.title.font.weight = "bold") |> 
+  tab_footnote(footnote = "GRS = Global Rating Scale, CES = Composite Error Score")
+
+```
+### Inter-Rater Correlation Coefficient
+The inter-rater correlation coefficient for the Baseline GRS was `r icc_baselineGRS$value` (95% CI: `r icc_baselineGRS$lbound` - `r icc_baselineGRS$ubound`) and for the Final GRS it was `r icc_finalGRS$value` (95% CI: `r icc_finalGRS$lbound` - `r icc_finalGRS$ubound`). The ICC for the final Composite Error Score (CES) was `r icc_ces$value` (95% CI: `r icc_ces$lbound` - `r icc_ces$ubound`). This is seen in the following table:
+
+```{r}
+icc_table
+```
