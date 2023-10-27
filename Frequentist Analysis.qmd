@@ -17,7 +17,6 @@ number-sections: true
 
 ## Introduction
 
-This is an explanation of the Bayesian analysis of the randomsied controlled trial comoparing virtual reality training vs standard care for ultrasound-guided femoral nerve blocks.
 This is an explanation of the analysis of the randomsied controlled trial comoparing virtual reality training vs standard care for ultrasound-guided femoral nerve blocks.
 
 ## Methods
