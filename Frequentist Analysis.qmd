@@ -112,7 +112,8 @@ table1 <- vr |>
   add_overall()
 
 # Run model
-vr_primary <- lm(final_grs_pct ~ baseline_grs_pct + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years + DASS_Total, data = vr) |> broom::tidy(conf.int = T)
+vr_model <- lm(final_grs_pct ~ baseline_grs_pct + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years + DASS_Total, data = vr) 
+vr_primary <- vr_model|> broom::tidy(conf.int = T)
   
 
 ```
@@ -126,7 +127,7 @@ table1
 
 ### Primary Outcome
 
-The analysis shows that there was no difference in the Global Rating Scale in the use of virtual reality training compared with standard teaching for ultrasound-guided femoral nerve blocks. After adjusting for baseline differences in the GRS, age, sex and years of playing video games, the VR group had a mean GRS of `r vr_primary$estimate[1]` and the standard group had a mean GRS of `r vr_primary$estimate[1] + vr_primary$estimate[3] ` The average treatment effect of using Virtual Reality compared to standard teaching is `r vr_primary$estimate[3]`% (95% CI `r vr_primary$conf.low[3]` - `r vr_primary$conf.high[3]`).
+The analysis shows that there was no difference in the Global Rating Scale in the use of virtual reality training compared with standard teaching for ultrasound-guided femoral nerve blocks. After adjusting for baseline differences in the GRS, age, sex and years of playing video games, the standard group had a mean GRS of `r vr_primary$estimate[1]` and the VR group had a mean GRS of `r vr_primary$estimate[1] + vr_primary$estimate[3] ` The average treatment effect of using Virtual Reality compared to standard teaching is `r vr_primary$estimate[3]`% (95% CI `r vr_primary$conf.low[3]` - `r vr_primary$conf.high[3]`, p=`r vr_primary$p.value[3]`).
 
 ### Secondary Outcomes
 As can be seen from the table below, there are no differences in any of the pre-specified secondary outcomes between the virtual reality and standard teaching interventions.
@@ -148,7 +149,7 @@ vr_needle_pass <- glm(
 # Run model to determine a difference in image quality score
 vr_image_qual <- MASS::polr(
   data = vr,
-  formula = as.ordered(Final_BoxC) ~ as.ordered(Baseline_BoxC) + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years) |> broom::tidy(conf.int = T)
+  formula = as.ordered(Final_BoxC) ~ as.ordered(Baseline_BoxC) + Group + age + Sex + IfPlayed_VideoGames_HowLong_Years) |>  broom::tidy(conf.int = T, p.values = T)
 
 # Run model to determine a difference in Composite Error Score
 vr_ces <- glm(
@@ -170,9 +171,10 @@ vr_tlx <- lm(
 table <- function(data){
   data |>
   mutate(across(estimate:conf.high, ~round(.,2))) |>  
-  reframe(Outcome = Outcome, Subgroup, "ATE [95% CI]" = str_c(estimate, " [", conf.low, ", ", conf.high, "]"))
+  reframe(Outcome = Outcome, Subgroup, "ATE [95% CI]" = str_c(estimate, " [", conf.low, ", ", conf.high, "]"), "p-value" = p.value)
 }
 
+primary_outcome <- vr_model |> avg_comparisons(variables = "Group") |> mutate(Outcome = "VR Vs Standard", Subgroup = "Primary Outcome") |> table()
 sec_outcome_error <- vr_error_score |> mutate(Outcome = "Error Score", Subgroup = "Error") |> table()
 sec_outcome_needle <- vr_needle_pass |> mutate(Outcome = "Number of Needle Passes", Subgroup = "Error")  |> table()
 sec_outcome_image <- vr_image_qual |> slice(9) |> mutate(Outcome = "Image Quality Score", Subgroup = "Error")  |> table()
@@ -180,11 +182,11 @@ sec_outcome_ces <- vr_ces |> mutate(Outcome = "Composite Error Score", Subgroup 
 sec_outcome_time <- vr_time |> mutate(Outcome = "Time Taken", Subgroup = "Other")  |> table()
 sec_outcome_tlx <- vr_tlx |> mutate(Outcome = "TLX Score", Subgroup = "Other")  |> table()
 
-sec_outcomes <-
-  rbind(sec_outcome_error, sec_outcome_needle, sec_outcome_image, sec_outcome_ces, sec_outcome_time, sec_outcome_tlx)
+outcomes <-
+  rbind(primary_outcome, sec_outcome_error, sec_outcome_needle, sec_outcome_image, sec_outcome_ces, sec_outcome_time, sec_outcome_tlx)
 
 # Create Table
-sec_outcomes_tbl <- sec_outcomes |> 
+outcomes_tbl <- outcomes |> 
   group_by(Subgroup, Outcome) |> 
   gt(groupname_col = c("Subgroup"))|>  
   tab_stubhead(label = " ") |>  
@@ -200,12 +202,12 @@ sec_outcomes_tbl <- sec_outcomes |>
     heading.title.font.weight = "bold") |> 
   tab_row_group(
     label = "Error Metrics",
-    rows = c(1:4)) |>   
+    rows = c(2:5)) |>   
   tab_row_group(
     label = "Other Outcomes",
-    rows = c(5:6)) |> 
-  row_group_order(groups = c("Error Metrics", "Other Outcomes")) |> 
-  tab_header(title = "Secondary Outcomes")|>
+    rows = c(6:7)) |> 
+  row_group_order(groups = c("Primary Outcome" ,"Error Metrics", "Other Outcomes")) |> 
+  tab_header(title = "Primary and Secondary Outcomes")|>
   opt_align_table_header(align = "left") |> 
   tab_style(
     style = cell_borders(
@@ -219,7 +221,7 @@ sec_outcomes_tbl <- sec_outcomes |>
 ```
 
 ```{r}
-sec_outcomes_tbl
+outcomes_tbl
 ```
 
 
